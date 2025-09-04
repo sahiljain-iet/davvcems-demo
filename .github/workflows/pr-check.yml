@@ -1,0 +1,22 @@
+name: PR Check
+on:
+  pull_request:
+    branches: [dev, main]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Run Checks
+        run: |
+          echo "Running code checks..."
+          bash scripts/deploy.sh
+          echo "Checks passed!"
+      - name: Clean Up Temporary Files
+        if: always()
+        run: |
+          echo "Cleaning up temporary files..."
+          rm -rf /tmp/checks
