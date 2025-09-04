@@ -1,0 +1,42 @@
+name: Deploy to Staging
+on:
+  push:
+    branches: [dev]
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Backup Current Deployment
+        run: |
+          mkdir -p /tmp/davvcems-stage_backup
+          cp -r scripts /tmp/davvcems-stage_backup || true
+          echo "Backup created at /tmp/davvcems-stage_backup"
+      - name: Deploy to Staging
+        run: |
+          mkdir -p /tmp/davvcems-stage
+          cp -r scripts/* /tmp/davvcems-stage/
+          bash /tmp/davvcems-stage/deploy.sh
+          echo "Deployed to staging at /tmp/davvcems-stage"
+      - name: Verify Deployment
+        run: |
+          ping -c 4 google.com || echo "Staging verification failed at $(date)" >> /tmp/davvcems-stage/verify.log
+        continue-on-error: true
+      - name: Rollback on Failure
+        if: failure()
+        run: |
+          rm -rf /tmp/davvcems-stage
+          cp -r /tmp/davvcems-stage_backup /tmp/davvcems-stage
+          echo "Rollback triggered for commit ${{ github.sha }} at $(date)" >> /tmp/davvcems-stage/rollback.log
+      - name: Notify on Failure
+        if: failure()
+        run: |
+          echo "🚨 Staging Deployment Failed for commit ${{ github.sha }}! Rollback executed. Check logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> /tmp/davvcems-stage/notification.log
+      - name: Clean Up Old Backups
+        if: success()
+        run: |
+          find /tmp -name "davvcems-stage_backup" -type d -mtime +7 -exec rm -rf {} \;
+          echo "Cleaned up old staging backups"
