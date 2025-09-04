@@ -1,7 +1,9 @@
 name: Deploy to Production
+
 on:
   push:
     branches: [main]
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -10,33 +12,39 @@ jobs:
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
+
       - name: Backup Current Deployment
         run: |
-          mkdir -p /tmp/davvcems-prod_backup
-          cp -r scripts /tmp/davvcems-prod_backup || true
-          echo "Backup created at /tmp/davvcems-prod_backup"
+          mkdir -p /tmp/davvcems-prod/backups
+          cp -r scripts /tmp/davvcems-prod/backups/$(date +%F_%H-%M-%S) || true
+          echo "Backup created at /tmp/davvcems-prod/backups"
+
       - name: Deploy to Production
         run: |
-          mkdir -p /tmp/davvcems-prod
-          cp -r scripts/* /tmp/davvcems-prod/
-          bash /tmp/davvcems-prod/deploy.sh
-          echo "Deployed to production at /tmp/davvcems-prod"
+          mkdir -p /tmp/davvcems-prod/deployment
+          cp -r scripts/* /tmp/davvcems-prod/deployment/
+          bash /tmp/davvcems-prod/deployment/deploy.sh
+          echo "Deployed to production at /tmp/davvcems-prod/deployment"
+
       - name: Verify Deployment
         run: |
           ping -c 4 google.com || echo "Production verification failed at $(date)" >> /tmp/davvcems-prod/verify.log
         continue-on-error: true
+
       - name: Rollback on Failure
         if: failure()
         run: |
-          rm -rf /tmp/davvcems-prod
-          cp -r /tmp/davvcems-prod_backup /tmp/davvcems-prod
+          rm -rf /tmp/davvcems-prod/deployment
+          cp -r /tmp/davvcems-prod/backups/$(ls -t /tmp/davvcems-prod/backups | head -n 1) /tmp/davvcems-prod/deployment
           echo "Rollback triggered for commit ${{ github.sha }} at $(date)" >> /tmp/davvcems-prod/rollback.log
+
       - name: Notify on Failure
         if: failure()
         run: |
           echo "🚨 Production Deployment Failed for commit ${{ github.sha }}! Rollback executed. Check logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> /tmp/davvcems-prod/notification.log
+
       - name: Clean Up Old Backups
         if: success()
         run: |
-          find /tmp -name "davvcems-prod_backup" -type d -mtime +7 -exec rm -rf {} \;
+          find /tmp/davvcems-prod/backups -name "*" -type d -mtime +7 -exec rm -rf {} \; 2>/dev/null || true
           echo "Cleaned up old production backups"
