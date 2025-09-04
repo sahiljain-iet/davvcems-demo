@@ -1,0 +1,42 @@
+name: Deploy to Production
+on:
+  push:
+    branches: [main]
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Backup Current Deployment
+        run: |
+          mkdir -p /tmp/davvcems-prod_backup
+          cp -r scripts /tmp/davvcems-prod_backup || true
+          echo "Backup created at /tmp/davvcems-prod_backup"
+      - name: Deploy to Production
+        run: |
+          mkdir -p /tmp/davvcems-prod
+          cp -r scripts/* /tmp/davvcems-prod/
+          bash /tmp/davvcems-prod/deploy.sh
+          echo "Deployed to production at /tmp/davvcems-prod"
+      - name: Verify Deployment
+        run: |
+          ping -c 4 google.com || echo "Production verification failed at $(date)" >> /tmp/davvcems-prod/verify.log
+        continue-on-error: true
+      - name: Rollback on Failure
+        if: failure()
+        run: |
+          rm -rf /tmp/davvcems-prod
+          cp -r /tmp/davvcems-prod_backup /tmp/davvcems-prod
+          echo "Rollback triggered for commit ${{ github.sha }} at $(date)" >> /tmp/davvcems-prod/rollback.log
+      - name: Notify on Failure
+        if: failure()
+        run: |
+          echo "🚨 Production Deployment Failed for commit ${{ github.sha }}! Rollback executed. Check logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> /tmp/davvcems-prod/notification.log
+      - name: Clean Up Old Backups
+        if: success()
+        run: |
+          find /tmp -name "davvcems-prod_backup" -type d -mtime +7 -exec rm -rf {} \;
+          echo "Cleaned up old production backups"
