@@ -1,1 +1,1 @@
-echo 'Test staging deploy'
+echo 'Test staging deployment'
